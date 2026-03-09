@@ -39,7 +39,17 @@ class OtpForgeApp:
         ttk.Entry(top, textvariable=self.issuer_var, width=20).grid(row=1, column=1, padx=(0, 8), sticky=tk.W)
 
         ttk.Label(top, text="Secret (Base32)").grid(row=0, column=2, sticky=tk.W)
-        ttk.Entry(top, textvariable=self.secret_var, width=36, show="*").grid(row=1, column=2, padx=(0, 8), sticky=tk.W)
+        self.show_secret_var = tk.BooleanVar(value=False)
+
+        self.secret_entry = ttk.Entry(top, textvariable=self.secret_var, width=36, show="*")
+        self.secret_entry.grid(row=1, column=2, padx=(0, 8), sticky=tk.W)
+
+        ttk.Checkbutton(
+            top,
+            text="Show",
+            variable=self.show_secret_var,
+            command=self._toggle_secret_visibility,
+        ).grid(row=1, column=5, padx=(0, 0), sticky=tk.W)
 
         ttk.Label(top, text="Digits").grid(row=0, column=3, sticky=tk.W)
         ttk.Entry(top, textvariable=self.digits_var, width=6).grid(row=1, column=3, padx=(0, 8), sticky=tk.W)
@@ -47,9 +57,12 @@ class OtpForgeApp:
         ttk.Label(top, text="Period").grid(row=0, column=4, sticky=tk.W)
         ttk.Entry(top, textvariable=self.period_var, width=6).grid(row=1, column=4, padx=(0, 8), sticky=tk.W)
 
+        top.grid_columnconfigure(2, weight=1)
+
         controls = ttk.Frame(self.root, padding=(12, 0, 12, 8))
         controls.pack(fill=tk.X)
         ttk.Button(controls, text="Save / Update", command=self.save_entry).pack(side=tk.LEFT)
+        ttk.Button(controls, text="Copy Code", command=self.copy_selected_code).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(controls, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(controls, text="Refresh", command=self.refresh_rows).pack(side=tk.LEFT, padx=(8, 0))
 
@@ -75,11 +88,38 @@ class OtpForgeApp:
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        self.tree.bind("<Double-1>", self._on_tree_double_click)
+
         self.status = ttk.Label(self.root, text="", padding=(12, 0, 12, 8))
         self.status.pack(fill=tk.X)
 
     def set_status(self, text: str) -> None:
         self.status.configure(text=text)
+
+    def _toggle_secret_visibility(self) -> None:
+        show = "" if self.show_secret_var.get() else "*"
+        self.secret_entry.configure(show=show)
+
+    def _on_tree_double_click(self, _event: object) -> None:
+        # Double click = copy the selected code
+        self.copy_selected_code()
+
+    def copy_selected_code(self) -> None:
+        selected = self.tree.selection()
+        if not selected:
+            self.set_status("No entry selected")
+            return
+
+        label = selected[0]
+        values = self.tree.item(label, "values")
+        if not values or len(values) < 2:
+            self.set_status("No code available")
+            return
+
+        code = str(values[1])
+        self.root.clipboard_clear()
+        self.root.clipboard_append(code)
+        self.set_status(f"Copied code for {label}")
 
     def save_entry(self) -> None:
         try:
