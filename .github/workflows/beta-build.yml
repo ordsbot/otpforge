@@ -1,0 +1,114 @@
+name: Daily Beta Build
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            zip_name: linux
+          - os: windows-latest
+            platform: windows
+            zip_name: windows
+          - os: macos-latest
+            platform: darwin
+            zip_name: darwin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Build executables
+      run: python build.py
+
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Create platform zip
+      run: |
+        VERSION=${{ steps.date.outputs.date }}
+        if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          powershell "Compress-Archive -Path ./dist/* -DestinationPath ${{ matrix.zip_name }}-v$VERSION.zip"
+        else
+          zip -r ${{ matrix.zip_name }}-v$VERSION.zip ./dist/
+        fi
+      shell: bash
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.zip_name }}-build
+        path: ${{ matrix.zip_name }}-v*.zip
+
+  create-source-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+    - name: Create source zip
+      run: |
+        VERSION=${{ steps.date.outputs.date }}
+        zip clawhub-package.zip cli.py core.py gui.py SKILL.md
+
+    - name: Upload source artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: source-build
+        path: clawhub-package.zip
+
+  release:
+    needs: [build, create-source-zip]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: beta-${{ steps.date.outputs.date }}
+        name: Beta Build ${{ steps.date.outputs.date }}
+        body: |
+          Daily beta build for ${{ steps.date.outputs.date }}
+
+          This is an automated beta release.
+        files: |
+          linux-build/linux-v${{ steps.date.outputs.date }}.zip
+          windows-build/windows-v${{ steps.date.outputs.date }}.zip
+          darwin-build/darwin-v${{ steps.date.outputs.date }}.zip
+          source-build/clawhub-package.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
