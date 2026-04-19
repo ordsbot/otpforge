@@ -33,9 +33,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -80,7 +81,9 @@ jobs:
       - name: Create source zip
         run: |
           VERSION=${{ steps.stamp.outputs.stamp }}
-          zip clawhub-package-v$VERSION.zip cli.py core.py gui.py SKILL.md build.py otpforge.spec
+          # Keep the archive minimal and explicit (include spec file if present)
+          zip clawhub-package-v$VERSION.zip cli.py core.py gui.py SKILL.md build.py otpforge.spec 2>/dev/null || \
+          zip clawhub-package-v$VERSION.zip cli.py core.py gui.py SKILL.md build.py
 
       - name: Upload source artifact
         uses: actions/upload-artifact@v4
